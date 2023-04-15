@@ -1,0 +1,35 @@
+---
+title: "Grammar of Graphics (ggplot) and Related Packages"
+author: "Terrence Neumann"
+date: "2023-04-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+```
+
+## Grammar of Graphics (ggplot)
+
+This demonstration introduces you to the logic of the ggplot package in R, with some interesting applications relevant to Computational Social Science. We will cover:
+
+* Aesthetics and Basic Plots (aes, geom_bar, geom_point, geom_line)
+* Facets (facet_wrap, facet_grid)
+* Themes (ggthemes package)
+* Advanced Plots (alluvials, heatmaps)
+
+First, load the following packages. 
+
+```{r, message=F, warning=F}
+library(dplyr)
+library(ggplot2)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
