@@ -6,6 +6,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.width=16, fig.height=8) 
 ```
 
 ## Grammar of Graphics (ggplot)
@@ -15,21 +16,205 @@ This demonstration introduces you to the logic of the ggplot package in R, with 
 * Aesthetics and Basic Plots (aes, geom_bar, geom_point, geom_line)
 * Facets (facet_wrap, facet_grid)
 * Themes (ggthemes package)
-* Advanced Plots (alluvials, heatmaps)
+* Advanced Plots (dplyr + heatmaps, ggmap)
 
-First, load the following packages. 
+In order to explore ggplot's capabilities, we will investigate patterns in Chicago violent crime data.
+
+First, you'll need the following packages. Install them if they aren't already installed.
 
 ```{r, message=F, warning=F}
 library(dplyr)
 library(ggplot2)
+library(lubridate)
+library(ggthemes)
+library(ggmap)
+library(readr)
+library(ggdensity)
+library(geomtextpath)
+
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
+### Load the dataset
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+First load the data, then create a column for violent crime and property crime
+
+```{r}
+# List of "index" crimes - most common + most serious
+iucr_crime <- c('01A','01B','2', '3','04A', '04B', '5','6','7','08A','08B') 
+violent_crime <- c('01A','01B','2','3','04A','04B','08A','08B')
+crimes_raw <- read_csv('data/chicago_crimes_2022.csv')
+names(crimes_raw) = gsub(' ', '.', names(crimes_raw))
+
+# keep only "index" crimes, add column for crime type
+# create some columns
+crimes_iucr <- crimes_raw %>%
+  filter(FBI.Code %in% iucr_crime
+         & District != 31) %>%
+  mutate(crime_type = ifelse(FBI.Code %in% violent_crime, 'Violent Crime', 'Property Crime'),
+         date_time = as.POSIXct(Date, format = '%m/%d/%y %H:%M'),
+         date = as.Date(date_time),
+         month = month(date_time),
+         hour = hour(date_time),
+         day_of_week = weekdays(date),
+         District = paste('District', ifelse(nchar(District)==1, paste0('0', District), District))) %>%
+  filter(date < '2023-01-01')
+
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+## Aesthetics and Basic Plots
+
+Aesthetics are used in ggplot to map data attributes to different axes (x,y), as well as to different aesthetic variables, such as color, fill, shape, or size (there are many more). Here are some examples of different aesthetics.
+
+First, let's do a time series of crime across the days of the year, with color indicating the crime type (property or violent crime).
+
+To make this easier, I usually manipulate data first, although ggplot has some built in data manipulation functions (see "stat")
+
+### Time Series data
+
+```{r, warning=F, message=F}
+by_crime_type_date <- crimes_iucr %>%
+  group_by(crime_type, date) %>%
+  summarise(count = n())
+
+head(by_crime_type_date)
+
+ggplot(data = by_crime_type_date) +
+  geom_line(aes(x = date, y = count, color = crime_type))
+```
+
+### Bar chart data
+
+Bar charts are used when one of the axes contains a categorical variable. For bar charts, you want to use the "fill" aesthetic to show different colors.
+
+```{r, warning=F, message=F}
+by_crime_type_month <- crimes_iucr %>%
+  group_by(crime_type, month) %>%
+  summarise(count = n())
+
+# Stacked bar chart
+ggplot(data = by_crime_type_month) +
+  geom_bar(aes(x = factor(month), y = count, fill = crime_type), stat = 'identity')
+
+# side-by-side bar chart
+ggplot(data = by_crime_type_month) +
+  geom_bar(aes(x = factor(month), y = count, fill = crime_type), stat = 'identity', position='dodge')
+
+```
+
+## Facets
+
+One of the aspects that makes ggplot so powerful is that it uses **facets** to easily add subplots to your analysis. This is much easier than in other packages, such as matplotlib, for instance.
+Adding a facet will create a subplot for every unique value of the variable you specify in the facet argument.
+
+```{r, warning=F, message=F}
+by_crime_type_month_district <- crimes_iucr %>%
+  group_by(crime_type, month, District) %>%
+  summarise(count = n())
+
+ggplot(data = by_crime_type_month_district) +
+  geom_bar(aes(x=factor(month), y=count, fill=crime_type), stat='identity') +
+  facet_wrap(~ District) +
+  xlab('Month of Year') +
+  ylab('Count of Crimes')
+
+```
+
+## Overall Plot Aesthetics - themes and colors
+
+There are many color palettes and background themes available for ggplot. You can create a custom theme using the theme() function, but there are many pre-made themes that look very good. Using the previous plot as an example, we can manipulate the theme.
+
+```{r}
+ggplot(data = by_crime_type_month_district) +
+  geom_bar(aes(x=factor(month), y=count, fill=crime_type), stat='identity') +
+  facet_wrap(~ District) +
+  xlab('Month of Year') +
+  ylab('Count of Crimes') +
+  theme_few()
+
+ggplot(data = by_crime_type_month_district) +
+  geom_bar(aes(x=factor(month), y=count, fill=crime_type), stat='identity') +
+  facet_wrap(~ District) +
+  xlab('Month of Year') +
+  ylab('Count of Crimes') +
+  theme_wsj()
+
+ggplot(data = by_crime_type_month_district) +
+  geom_bar(aes(x=factor(month), y=count, fill=crime_type), stat='identity') +
+  facet_wrap(~ District) +
+  xlab('Month of Year') +
+  ylab('Count of Crimes') +
+  theme_solarized()
+
+```
+
+Also, you can manually set the colors of variables you have mapped aesthetics to.
+
+```{r}
+
+ggplot(data = by_crime_type_month_district) +
+  geom_bar(aes(x=factor(month), y=count, fill=crime_type), stat='identity') +
+  facet_wrap(~ District) +
+  xlab('Month of Year') +
+  ylab('Count of Crimes') +
+  theme_few() +
+  scale_fill_manual('Crime Type', values = c('blue', 'orange'))
+
+
+```
+
+## Advanced Plots 
+
+### Heatmap
+
+Let's create a heatmap so we can determine when the most police should be deployed, faceted by crime type.
+
+```{r, warning=F, message=F}
+by_crime_type_dow_hour <- crimes_iucr %>%
+  mutate(day_of_week = factor(day_of_week, levels = c('Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'))) %>%
+  group_by(crime_type, day_of_week, hour) %>%
+  summarise(count = n()) 
+
+
+ggplot(data = by_crime_type_dow_hour) +
+  geom_tile(aes(x=factor(hour), y=day_of_week, fill=count)) +
+  facet_wrap(~ crime_type) +
+  theme_few() +
+  xlab('Hour of Day')
+
+
+```
+
+
+We can make this look much better by using a **viridis** color scale.
+
+```{r}
+ggplot(data = by_crime_type_dow_hour) +
+  geom_tile(aes(x=factor(hour), y=day_of_week, fill=count)) +
+  facet_wrap(~ crime_type) +
+  theme_few() +
+  xlab('Hour of Day') +
+  scale_fill_viridis_b()
+
+```
+
+
+### Location Map
+
+Finally, we can investigate where crimes happen by making a place-based heatmap that will show the density of the different types of crimes across the city for the summer months.
+
+
+
+```{r}
+
+summer_crimes <- crimes_iucr %>%
+  filter(month %in% c(6, 7, 8))
+
+qmplot(Longitude, Latitude, data = summer_crimes, geom = "blank", zoom = 12, maptype = "toner-background") +
+  geom_hdr(aes(fill = after_stat(probs)), alpha = .3) +
+  scale_fill_viridis_d(option = "A") +
+  facet_wrap(~ crime_type)
+
+
+
+```
